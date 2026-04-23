@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAdminFromToken } from "@/lib/admin";
-import { deleteFromR2 } from "@/lib/r2";
+import { deleteFromBlob } from "@/lib/blob";
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -23,7 +23,7 @@ export async function GET() {
   }
 }
 
-// POST /api/files — register uploaded files in database (after R2 upload)
+// POST /api/files — register uploaded files in database
 export async function POST(request: NextRequest) {
   try {
     const admin = await getAdminFromToken(request);
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     for (const file of files) {
       const fileRecord = await db.uploadedFile.create({
         data: {
-          filename: file.key || file.name,
+          filename: file.pathname || file.name,
           originalName: file.name,
           mimeType: file.type || "application/octet-stream",
           size: file.size || 0,
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/files — delete file from database and R2
+// DELETE /api/files — delete file from database and Vercel Blob
 export async function DELETE(request: NextRequest) {
   try {
     const admin = await getAdminFromToken(request);
@@ -89,9 +89,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Dosya bulunamadı" }, { status: 404 });
     }
 
-    // Delete from R2 cloud
-    if (file.filename) {
-      await deleteFromR2(file.filename);
+    // Delete from Vercel Blob
+    try {
+      await deleteFromBlob(file.url);
+    } catch (err) {
+      console.error("Blob delete error:", err);
     }
 
     // Delete from database

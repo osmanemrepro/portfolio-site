@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generatePresignedUploadUrl, getR2PublicUrl, r2Bucket } from "@/lib/r2";
+import { uploadToBlob } from "@/lib/blob";
 import { getAdminFromToken } from "@/lib/admin";
 
-// POST /api/upload — generate a presigned URL for direct client upload to R2
+// POST /api/upload — upload file to Vercel Blob
 export async function POST(request: NextRequest) {
   try {
     const admin = await getAdminFromToken(request);
@@ -10,34 +10,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { fileName, fileType, fileSize } = body;
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
 
-    if (!fileName || !fileType) {
-      return NextResponse.json({ error: "Dosya adı ve türü gerekli" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: "Dosya bulunamadı" }, { status: 400 });
     }
 
-    // Max 10MB per file
-    if (fileSize && fileSize > 10 * 1024 * 1024) {
+    // Max 10MB
+    if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: "Dosya boyutu 10MB'dan küçük olmalı" }, { status: 400 });
     }
 
-    // Generate a unique key: uploads/YYYY/MM/filename-timestamp.ext
-    const timestamp = Date.now();
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const datePrefix = new Date().toISOString().slice(0, 7).replace("-", "/");
-    const key = `uploads/${datePrefix}/${timestamp}-${safeName}`;
-
-    const presignedUrl = await generatePresignedUploadUrl(key, fileType);
-    const publicUrl = getR2PublicUrl(key);
+    const blob = await uploadToBlob(file, file.name, {
+      contentType: file.type,
+    });
 
     return NextResponse.json({
-      presignedUrl,
-      key,
-      publicUrl,
+      url: blob.url,
+      pathname: blob.pathname,
+      size: blob.size,
+      name: file.name,
+      type: file.type,
     });
   } catch (err) {
-    console.error("Upload presign error:", err);
-    return NextResponse.json({ error: "Presigned URL oluşturulamadı" }, { status: 500 });
+    console.error("Upload error:", err);
+    return NextResponse.json({ error: "Dosya yüklenirken hata oluştu" }, { status: 500 });
   }
 }

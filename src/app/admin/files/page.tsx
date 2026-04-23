@@ -46,6 +46,7 @@ import {
   Search,
   Upload,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface UploadedFile {
@@ -116,7 +117,7 @@ export default function AdminFilesPage() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; name: string; status: 'uploading' | 'done' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,63 +143,47 @@ export default function AdminFilesPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  // Upload a single file to R2 via presigned URL
-  const uploadSingleFile = async (file: File): Promise<{ name: string; size: number; type: string; url: string; key: string } | null> => {
-    try {
-      // Step 1: Get presigned URL from server
-      const presignRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { ...headers(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-        }),
-      });
-
-      if (!presignRes.ok) {
-        const err = await presignRes.json();
-        throw new Error(err.error || 'Presigned URL alınamadı');
-      }
-
-      const { presignedUrl, key, publicUrl } = await presignRes.json();
-
-      // Step 2: Upload directly to R2 using presigned URL
-      await fetch(presignedUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
-      });
-
-      return {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: publicUrl,
-        key,
-      };
-    } catch (err) {
-      console.error('File upload error:', err);
-      return null;
-    }
-  };
-
-  // Handle multiple file uploads
+  // Upload files to Vercel Blob via server API
   const handleFileUpload = async (fileList: FileList | File[]) => {
     const filesArray = Array.from(fileList);
     if (filesArray.length === 0) return;
 
-    const uploadedResults: { name: string; size: number; type: string; url: string; key: string }[] = [];
+    const uploadedResults: { name: string; size: number; type: string; url: string; pathname: string }[] = [];
 
     for (let i = 0; i < filesArray.length; i++) {
       const file = filesArray[i];
-      setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name });
+      setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name, status: 'uploading' });
 
-      const result = await uploadSingleFile(file);
-      if (result) {
-        uploadedResults.push(result);
-      } else {
+      try {
+        // Upload to Vercel Blob via /api/upload (FormData)
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: headers(),
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json();
+          throw new Error(err.error || 'Yükleme başarısız');
+        }
+
+        const result = await uploadRes.json();
+        uploadedResults.push({
+          name: result.name,
+          size: result.size,
+          type: result.type,
+          url: result.url,
+          pathname: result.pathname,
+        });
+
+        setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name, status: 'done' });
+      } catch (err) {
+        console.error('Upload error:', err);
         toast.error(`${file.name} yüklenemedi`);
+        setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name, status: 'error' });
       }
     }
 
@@ -209,7 +194,7 @@ export default function AdminFilesPage() {
       return;
     }
 
-    // Step 3: Register files in database
+    // Register files in database
     try {
       const res = await fetch('/api/files', {
         method: 'POST',
@@ -285,7 +270,7 @@ export default function AdminFilesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Dosya Yönetimi</h1>
-          <p className="text-zinc-400 mt-1">Cloudflare R2 bulut dosya depolama sistemi</p>
+          <p className="text-zinc-400 mt-1">Vercel Blob bulut dosya depolama</p>
         </div>
         <Button onClick={() => setDialogOpen(true)} className="bg-white text-black hover:bg-zinc-200">
           <CloudUpload className="size-4 mr-2" />
@@ -378,7 +363,7 @@ export default function AdminFilesPage() {
         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files); }}
         className={`rounded-xl border-2 border-dashed transition-all duration-300 p-8 text-center cursor-pointer ${
-          dragOver ? 'border-purple-500 bg-purple-500/5' : 'border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50'
+          dragOver ? 'border-blue-500 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50'
         }`}
         onClick={() => dragFileInputRef.current?.click()}
       >
@@ -389,7 +374,7 @@ export default function AdminFilesPage() {
           className="hidden"
           onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
         />
-        <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-purple-400' : 'text-zinc-600'}`} />
+        <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-blue-400' : 'text-zinc-600'}`} />
         <p className="text-sm text-zinc-400">
           {dragOver ? 'Dosyaları buraya bırakın!' : 'Dosyaları sürükleyip bırakın veya tıklayarak seçin'}
         </p>
@@ -397,13 +382,19 @@ export default function AdminFilesPage() {
       </div>
 
       {/* Upload progress */}
-      {isUploading && (
-        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 flex items-center gap-3">
-          <Loader2 className="size-5 text-purple-400 animate-spin" />
+      {isUploading && uploadProgress && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 flex items-center gap-3">
+          {uploadProgress.status === 'uploading' && (
+            <Loader2 className="size-5 text-blue-400 animate-spin shrink-0" />
+          )}
+          {uploadProgress.status === 'done' && (
+            <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
+          )}
+          {uploadProgress.status === 'error' && (
+            <AlertCircle className="size-5 text-red-400 shrink-0" />
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-purple-300 truncate">
-              {uploadProgress.name}
-            </p>
+            <p className="text-sm text-zinc-300 truncate">{uploadProgress.name}</p>
             <p className="text-xs text-zinc-500">
               {uploadProgress.current} / {uploadProgress.total}
             </p>
@@ -413,10 +404,12 @@ export default function AdminFilesPage() {
               <div
                 key={i}
                 className={`size-2 rounded-full transition-colors ${
-                  i < uploadProgress.current - 1
+                  i < uploadProgress.current - 1 || uploadProgress.status === 'done'
                     ? 'bg-emerald-400'
-                    : i === uploadProgress.current - 1
-                    ? 'bg-purple-400 animate-pulse'
+                    : i === uploadProgress.current - 1 && uploadProgress.status === 'uploading'
+                    ? 'bg-blue-400 animate-pulse'
+                    : uploadProgress.status === 'error' && i === uploadProgress.current - 1
+                    ? 'bg-red-400'
                     : 'bg-zinc-700'
                 }`}
               />
@@ -514,7 +507,7 @@ export default function AdminFilesPage() {
         <DialogContent className="bg-zinc-900 border-zinc-800 text-white sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CloudUpload className="size-5 text-purple-400" />
+              <CloudUpload className="size-5 text-blue-400" />
               Dosya Yükle
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
@@ -523,7 +516,6 @@ export default function AdminFilesPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Category selection */}
             <div className="space-y-2">
               <label className="text-sm text-zinc-300 font-medium">Kategori</label>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -540,16 +532,15 @@ export default function AdminFilesPage() {
               </Select>
             </div>
 
-            {/* Drop zone */}
             <div
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
               onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files); }}
               className={`rounded-xl border-2 border-dashed transition-all duration-300 p-8 text-center ${
-                dragOver ? 'border-purple-500 bg-purple-500/5' : 'border-zinc-700 hover:border-zinc-500'
+                dragOver ? 'border-blue-500 bg-blue-500/5' : 'border-zinc-700 hover:border-zinc-500'
               }`}
             >
-              <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-purple-400' : 'text-zinc-600'}`} />
+              <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-blue-400' : 'text-zinc-600'}`} />
               <p className="text-sm text-zinc-400">Dosyaları sürükleyin veya tıklayın</p>
               <p className="text-xs text-zinc-600 mt-1">Çoklu seçim desteklenir — Maks. 10MB</p>
               <input
@@ -561,7 +552,6 @@ export default function AdminFilesPage() {
               />
             </div>
 
-            {/* Supported formats */}
             <div className="rounded-lg border border-zinc-800 p-3">
               <p className="text-xs text-zinc-500 mb-2 font-medium">Desteklenen Formatlar:</p>
               <div className="flex flex-wrap gap-1.5">
@@ -608,7 +598,7 @@ export default function AdminFilesPage() {
                   value={selectedFile.url}
                   className="flex-1 px-3 py-2 rounded-lg bg-black/50 border border-zinc-700 text-zinc-300 text-xs font-mono"
                 />
-                <Button variant="ghost" size="sm" onClick={() => copyUrl(selectedFile.url)} className="text-purple-400 hover:text-purple-300">
+                <Button variant="ghost" size="sm" onClick={() => copyUrl(selectedFile.url)} className="text-blue-400 hover:text-blue-300">
                   <Copy className="size-4 mr-1" />
                   Kopyala
                 </Button>
