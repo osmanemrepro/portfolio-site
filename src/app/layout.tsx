@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   description: "Portfolio of Osman Emre YAYGIN — a learning-focused software developer crafting modern web experiences.",
   keywords: ["Osman Emre YAYGIN", "Software Developer", "Full Stack Developer", "React", "Next.js", "TypeScript", "Portfolio"],
   authors: [{ name: "Osman Emre YAYGIN" }],
-  icons: { icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg" },
+  icons: { icon: "/logo.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

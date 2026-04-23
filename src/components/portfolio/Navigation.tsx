@@ -142,11 +142,15 @@ export default function Navigation() {
                 e.preventDefault();
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="text-xl sm:text-2xl font-bold tracking-tight"
+              className="flex items-center"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <span className="gradient-text">OE</span>
+              <img
+                src="/logo.png"
+                alt="OE Logo"
+                className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-contain"
+              />
             </motion.a>
 
             {/* Desktop Nav Links */}

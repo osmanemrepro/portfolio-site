@@ -18,6 +18,7 @@ export default function Footer() {
           className="flex flex-col sm:flex-row items-center justify-between gap-4"
         >
           <div className="flex items-center gap-1.5 text-sm text-white/30">
+            <img src="/logo.png" alt="OE Logo" className="h-5 w-5 rounded object-contain opacity-70" />
             <span>{t("footer.builtWith")}</span>
             <Heart className="w-3.5 h-3.5 text-pink-500 fill-pink-500" />
             <span>by</span>

@@ -94,8 +94,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="p-6 border-b border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="size-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <ShieldCheck className="size-5 text-white" />
+                <div className="size-8 rounded-lg bg-white/10 flex items-center justify-center overflow-hidden">
+                  <img src="/logo.png" alt="Logo" className="size-5 rounded object-contain" />
                 </div>
                 <div>
                   <h2 className="font-semibold text-sm">Admin Panel</h2>
