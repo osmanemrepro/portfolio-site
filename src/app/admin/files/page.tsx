@@ -159,30 +159,44 @@ export default function AdminFilesPage() {
         const formData = new FormData();
         formData.append('file', file);
 
+        // AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
         const uploadRes = await fetch('/api/upload', {
           method: 'POST',
           headers: headers(),
           body: formData,
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!uploadRes.ok) {
-          const err = await uploadRes.json();
+          const err = await uploadRes.json().catch(() => ({ error: 'Bağlantı hatası' }));
           throw new Error(err.error || 'Yükleme başarısız');
         }
 
         const result = await uploadRes.json();
+
+        if (!result.url) {
+          throw new Error('Sunucudan geçersiz yanıt alındı');
+        }
+
         uploadedResults.push({
-          name: result.name,
-          size: result.size,
-          type: result.type,
+          name: result.name || file.name,
+          size: result.size || file.size,
+          type: result.type || file.type,
           url: result.url,
-          pathname: result.pathname,
+          pathname: result.pathname || '',
         });
 
         setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name, status: 'done' });
-      } catch (err) {
+      } catch (err: any) {
         console.error('Upload error:', err);
-        toast.error(`${file.name} yüklenemedi`);
+        const msg = err.name === 'AbortError'
+          ? `${file.name} zaman aşımı (60s)`
+          : err.message || `${file.name} yüklenemedi`;
+        toast.error(msg);
         setUploadProgress({ current: i + 1, total: filesArray.length, name: file.name, status: 'error' });
       }
     }
@@ -378,7 +392,7 @@ export default function AdminFilesPage() {
         <p className="text-sm text-zinc-400">
           {dragOver ? 'Dosyaları buraya bırakın!' : 'Dosyaları sürükleyip bırakın veya tıklayarak seçin'}
         </p>
-        <p className="text-xs text-zinc-600 mt-1">Maks. 10MB — Tüm dosya türleri desteklenir</p>
+        <p className="text-xs text-zinc-600 mt-1">Maks. 4MB — Tüm dosya türleri desteklenir</p>
       </div>
 
       {/* Upload progress */}
@@ -542,7 +556,7 @@ export default function AdminFilesPage() {
             >
               <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-blue-400' : 'text-zinc-600'}`} />
               <p className="text-sm text-zinc-400">Dosyaları sürükleyin veya tıklayın</p>
-              <p className="text-xs text-zinc-600 mt-1">Çoklu seçim desteklenir — Maks. 10MB</p>
+              <p className="text-xs text-zinc-600 mt-1">Çoklu seçim desteklenir — Maks. 4MB</p>
               <input
                 ref={fileInputRef}
                 type="file"

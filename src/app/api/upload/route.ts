@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadToBlob } from "@/lib/blob";
 import { getAdminFromToken } from "@/lib/admin";
 
+export const maxDuration = 60;
+
 // POST /api/upload — upload file to Vercel Blob
 export async function POST(request: NextRequest) {
   try {
@@ -17,9 +19,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Dosya bulunamadı" }, { status: 400 });
     }
 
-    // Max 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "Dosya boyutu 10MB'dan küçük olmalı" }, { status: 400 });
+    // Max 4MB (Vercel body limit)
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: "Dosya boyutu 4MB'dan küçük olmalı" }, { status: 400 });
     }
 
     const blob = await uploadToBlob(file, file.name, {
