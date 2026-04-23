@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAdmin } from '@/hooks/useAdmin';
-import { useUploadThing } from '@/lib/uploadthing-client';
+import { useUploadThing } from '@/lib/uploadthing';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -45,7 +45,6 @@ import {
   CloudUpload,
   FolderOpen,
   Search,
-  CheckCircle2,
   Upload,
 } from 'lucide-react';
 
@@ -73,7 +72,7 @@ function getFileIcon(mimeType: string) {
   if (mimeType.startsWith('image/')) return <ImageIcon className="size-5 text-emerald-400" />;
   if (mimeType.startsWith('video/')) return <FileVideo className="size-5 text-purple-400" />;
   if (mimeType.startsWith('audio/')) return <FileAudio className="size-5 text-amber-400" />;
-  if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('octet-stream') || mimeType.includes('blob'))
+  if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('octet-stream'))
     return <Archive className="size-5 text-orange-400" />;
   if (mimeType.includes('pdf') || mimeType.includes('word') || mimeType.includes('document') || mimeType.includes('text'))
     return <FileText className="size-5 text-blue-400" />;
@@ -106,26 +105,6 @@ function getCategoryLabel(value: string): string {
   return CATEGORIES.find((c) => c.value === value)?.label || value;
 }
 
-function getUploadthingEndpoint(file: File): string {
-  if (file.type.startsWith('image/')) return 'imageUploader';
-  if (file.type.startsWith('video/') || file.type.startsWith('audio/')) return 'mediaUploader';
-  if (
-    file.type.includes('pdf') ||
-    file.type.includes('word') ||
-    file.type.includes('document') ||
-    file.type.includes('excel') ||
-    file.type.includes('spreadsheet') ||
-    file.type.includes('powerpoint') ||
-    file.type.includes('presentation') ||
-    file.type.includes('text') ||
-    file.type.includes('json') ||
-    file.type.includes('xml') ||
-    file.type.includes('csv')
-  )
-    return 'documentUploader';
-  return 'archiveUploader';
-}
-
 export default function AdminFilesPage() {
   const { token } = useAdmin();
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -136,11 +115,11 @@ export default function AdminFilesPage() {
   const [selectedCategory, setSelectedCategory] = useState('general');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const headers = useCallback(
-    () => ({
-      Authorization: `Bearer ${token}`,
-    }),
+    () => ({ Authorization: `Bearer ${token}` }),
     [token]
   );
 
@@ -161,92 +140,23 @@ export default function AdminFilesPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  // Uploadthing upload hook
-  const { startUpload, isUploading } = useUploadThing('imageUploader', {
+  // Uploadthing hook
+  const { startUpload, isUploading } = useUploadThing('fileUploader', {
     onClientUploadComplete: async (uploadedFiles) => {
-      if (uploadedFiles && uploadedFiles.length > 0) {
-        try {
-          const res = await fetch('/api/files', {
-            method: 'POST',
-            headers: { ...headers(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              files: uploadedFiles.map((f) => ({
-                name: f.name,
-                size: f.size,
-                type: f.type,
-                url: f.url,
-                key: f.key,
-              })),
-              category: selectedCategory,
-            }),
-          });
-          const data = await res.json();
-          if (res.ok) {
-            toast.success(data.message || 'Dosyalar başarıyla yüklendi');
-            fetchFiles();
-            setDialogOpen(false);
-          } else {
-            toast.error(data.error || 'Dosya kaydedilemedi');
-          }
-        } catch {
-          toast.error('Dosya kaydedilirken hata oluştu');
-        }
-      }
-    },
-    onUploadError: (error) => {
-      console.error('Upload error:', error);
-      toast.error('Yükleme sırasında hata oluştu');
-    },
-  });
+      if (!uploadedFiles || uploadedFiles.length === 0) return;
 
-  const handleFileUpload = async (fileList: FileList | File[]) => {
-    const filesArray = Array.from(fileList);
-    if (filesArray.length === 0) return;
-
-    // Group files by upload endpoint
-    const groupedFiles: Record<string, File[]> = {};
-    for (const file of filesArray) {
-      const endpoint = getUploadthingEndpoint(file);
-      if (!groupedFiles[endpoint]) groupedFiles[endpoint] = [];
-      groupedFiles[endpoint].push(file);
-    }
-
-    // Upload each group
-    let allUploaded: Array<{ name: string; size: number; type: string; url: string; key: string }> = [];
-    let hasErrors = false;
-
-    for (const [endpoint, group] of Object.entries(groupedFiles)) {
-      try {
-        // For non-image endpoints, we use startUpload directly with config override
-        const response = await startUpload(group, {
-          endpoint: endpoint as 'imageUploader' | 'documentUploader' | 'mediaUploader' | 'archiveUploader',
-        });
-
-        if (response && response.length > 0) {
-          allUploaded.push(
-            ...response.map((f) => ({
-              name: f.name,
-              size: f.size,
-              type: f.type,
-              url: f.url,
-              key: f.key,
-            }))
-          );
-        }
-      } catch (err) {
-        console.error(`Upload failed for ${endpoint}:`, err);
-        hasErrors = true;
-      }
-    }
-
-    // Save all uploaded files to database
-    if (allUploaded.length > 0) {
       try {
         const res = await fetch('/api/files', {
           method: 'POST',
           headers: { ...headers(), 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            files: allUploaded,
+            files: uploadedFiles.map((f) => ({
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              url: f.url,
+              key: f.key,
+            })),
             category: selectedCategory,
           }),
         });
@@ -261,11 +171,17 @@ export default function AdminFilesPage() {
       } catch {
         toast.error('Dosya kaydedilirken hata oluştu');
       }
-    }
+    },
+    onUploadError: (error) => {
+      console.error('Uploadthing error:', error);
+      toast.error('Yükleme sırasında hata oluştu');
+    },
+  });
 
-    if (hasErrors && allUploaded.length === 0) {
-      toast.error('Tüm dosyalar yüklenirken hata oluştu');
-    }
+  const handleFileUpload = (fileList: FileList | File[]) => {
+    const filesArray = Array.from(fileList);
+    if (filesArray.length === 0) return;
+    startUpload(filesArray);
   };
 
   const handleDelete = async (id: string) => {
@@ -275,7 +191,6 @@ export default function AdminFilesPage() {
         headers: { ...headers(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-
       if (res.ok) {
         toast.success('Dosya silindi');
         fetchFiles();
@@ -320,12 +235,7 @@ export default function AdminFilesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Dosya Yönetimi</h1>
-          <p className="text-zinc-400 mt-1">
-            <Badge variant="secondary" className="bg-purple-500/10 text-purple-400 border-purple-500/20 mr-2 text-xs">
-              Uploadthing
-            </Badge>
-            Bulut tabanlı dosya yükleme ve yönetim sistemi
-          </p>
+          <p className="text-zinc-400 mt-1">Bulut tabanlı dosya yükleme ve yönetim sistemi</p>
         </div>
         <Button onClick={() => setDialogOpen(true)} className="bg-white text-black hover:bg-zinc-200">
           <CloudUpload className="size-4 mr-2" />
@@ -412,6 +322,30 @@ export default function AdminFilesPage() {
         </Select>
       </div>
 
+      {/* Drag & Drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files); }}
+        className={`rounded-xl border-2 border-dashed transition-all duration-300 p-8 text-center cursor-pointer ${
+          dragOver ? 'border-purple-500 bg-purple-500/5' : 'border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50'
+        }`}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+        />
+        <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-purple-400' : 'text-zinc-600'}`} />
+        <p className="text-sm text-zinc-400">
+          {dragOver ? 'Dosyaları buraya bırakın!' : 'Dosyaları sürükleyip bırakın veya tıklayarak seçin'}
+        </p>
+        <p className="text-xs text-zinc-600 mt-1">Maks. 4MB — Görsel, PDF, Metin, Arşiv desteklenir</p>
+      </div>
+
       {/* Upload progress */}
       {isUploading && (
         <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 flex items-center gap-3">
@@ -439,7 +373,7 @@ export default function AdminFilesPage() {
                 <TableRow className="border-zinc-800">
                   <TableCell colSpan={6} className="text-center py-12 text-zinc-500">
                     <FolderOpen className="size-10 mx-auto mb-3 text-zinc-700" />
-                    Henüz dosya yüklenmemiş. Yukarıdaki butondan dosya yükleyebilirsiniz.
+                    Henüz dosya yüklenmemiş. Yukarıdaki alandan dosya yükleyebilirsiniz.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -449,12 +383,7 @@ export default function AdminFilesPage() {
                       <div className="flex items-center gap-3">
                         {file.mimeType.startsWith('image/') ? (
                           <div className="size-10 rounded-lg overflow-hidden bg-zinc-800 shrink-0 border border-zinc-700">
-                            <img
-                              src={file.url}
-                              alt={file.originalName}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
+                            <img src={file.url} alt={file.originalName} className="w-full h-full object-cover" loading="lazy" />
                           </div>
                         ) : (
                           <div className="size-10 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-700">
@@ -463,9 +392,7 @@ export default function AdminFilesPage() {
                         )}
                         <div className="min-w-0">
                           <p className="text-sm text-white font-medium truncate max-w-[200px]">{file.originalName}</p>
-                          <p className="text-xs text-zinc-500 truncate max-w-[200px]">
-                            {file.uploadThingKey ? '☁️ Uploadthing' : file.url}
-                          </p>
+                          <p className="text-xs text-zinc-500 truncate max-w-[200px]">{file.url}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -478,10 +405,7 @@ export default function AdminFilesPage() {
                       {formatFileSize(file.size)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <Badge
-                        variant="secondary"
-                        className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/20"
-                      >
+                      <Badge variant="secondary" className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/20">
                         {getCategoryLabel(file.category)}
                       </Badge>
                     </TableCell>
@@ -491,37 +415,17 @@ export default function AdminFilesPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {file.mimeType.startsWith('image/') && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-zinc-400 hover:text-blue-400"
-                            onClick={() => setSelectedFile(file)}
-                          >
+                          <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-blue-400" onClick={() => setSelectedFile(file)}>
                             <ImageIcon className="size-4" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-zinc-400 hover:text-emerald-400"
-                          onClick={() => window.open(file.url, '_blank')}
-                        >
+                        <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-emerald-400" onClick={() => window.open(file.url, '_blank')}>
                           <Download className="size-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-zinc-400 hover:text-purple-400"
-                          onClick={() => copyUrl(file.url)}
-                        >
+                        <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-purple-400" onClick={() => copyUrl(file.url)}>
                           <Copy className="size-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-zinc-400 hover:text-red-400"
-                          onClick={() => setDeleteConfirm(file.id)}
-                        >
+                        <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-red-400" onClick={() => setDeleteConfirm(file.id)}>
                           <Trash2 className="size-4" />
                         </Button>
                       </div>
@@ -543,17 +447,11 @@ export default function AdminFilesPage() {
               Dosya Yükle
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Uploadthing bulut depolama ile güvenli dosya yükleme
+              Yüklemek istediğiniz dosyaları seçin veya sürükleyip bırakın
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Uploadthing status badge */}
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
-              <CheckCircle2 className="size-4 text-emerald-400" />
-              <p className="text-xs text-emerald-300">Uploadthing bulut entegrasyonu aktif</p>
-            </div>
-
             {/* Category selection */}
             <div className="space-y-2">
               <label className="text-sm text-zinc-300 font-medium">Kategori</label>
@@ -571,32 +469,32 @@ export default function AdminFilesPage() {
               </Select>
             </div>
 
-            {/* File input */}
-            <label className="flex flex-col items-center justify-center w-full h-40 rounded-xl border-2 border-dashed border-zinc-700 hover:border-purple-500 bg-zinc-900/30 cursor-pointer transition-all group">
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload className="size-10 mb-3 text-zinc-600 group-hover:text-purple-400 transition-colors" />
-                <p className="text-sm text-zinc-400 group-hover:text-zinc-300">
-                  <span className="font-semibold text-purple-400">Tıklayarak</span> dosya seçin
-                </p>
-                <p className="text-xs text-zinc-600 mt-1">Çoklu seçim desteklenir</p>
-              </div>
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
+              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files); }}
+              className={`rounded-xl border-2 border-dashed transition-all duration-300 p-8 text-center ${
+                dragOver ? 'border-purple-500 bg-purple-500/5' : 'border-zinc-700 hover:border-zinc-500'
+              }`}
+            >
+              <Upload className={`size-10 mx-auto mb-3 ${dragOver ? 'text-purple-400' : 'text-zinc-600'}`} />
+              <p className="text-sm text-zinc-400">Dosyaları sürükleyin veya tıklayın</p>
+              <p className="text-xs text-zinc-600 mt-1">Çoklu seçim desteklenir — Maks. 4MB</p>
               <input
+                ref={fileInputRef}
                 type="file"
                 multiple
                 className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    handleFileUpload(e.target.files);
-                  }
-                }}
+                onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
               />
-            </label>
+            </div>
 
             {/* Supported formats */}
             <div className="rounded-lg border border-zinc-800 p-3">
               <p className="text-xs text-zinc-500 mb-2 font-medium">Desteklenen Formatlar:</p>
               <div className="flex flex-wrap gap-1.5">
-                {['JPG', 'PNG', 'GIF', 'WebP', 'SVG', 'PDF', 'ZIP', 'RAR', 'DOC', 'XLS', 'PPT', 'MP4', 'MP3', 'JSON', 'CSV'].map(
+                {['JPG', 'PNG', 'GIF', 'WebP', 'SVG', 'PDF', 'ZIP', 'RAR', 'TXT', 'CSV'].map(
                   (fmt) => (
                     <span key={fmt} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
                       {fmt}

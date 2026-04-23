@@ -25,7 +25,7 @@ export async function GET() {
   }
 }
 
-// POST /api/files — register Uploadthing uploaded files to database
+// POST /api/files — register Uploadthing uploaded files in database
 export async function POST(request: NextRequest) {
   try {
     const admin = await getAdminFromToken(request);
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
           size: file.size || 0,
           url: file.url || file.ufsUrl,
           category: category || 'general',
-          uploadThingKey: file.key || file.uftsUrl,
+          uploadThingKey: file.key || null,
         },
       });
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/files — delete a file from database and Uploadthing cloud
+// DELETE /api/files — delete file from database and Uploadthing cloud
 export async function DELETE(request: NextRequest) {
   try {
     const admin = await getAdminFromToken(request);
@@ -91,13 +91,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 });
     }
 
-    // Delete from Uploadthing cloud if we have a key
+    // Delete from Uploadthing cloud
     if (file.uploadThingKey) {
       try {
         await utapi.deleteFiles(file.uploadThingKey);
       } catch (utError) {
         console.error('Uploadthing delete error:', utError);
-        // Continue with DB deletion even if cloud deletion fails
       }
     }
 
