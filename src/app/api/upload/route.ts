@@ -26,8 +26,11 @@ export async function POST(request: NextRequest) {
       contentType: file.type,
     });
 
+    // Use downloadUrl for private blobs so files are accessible
+    const fileUrl = blob.downloadUrl || blob.url;
+
     return NextResponse.json({
-      url: blob.url,
+      url: fileUrl,
       pathname: blob.pathname,
       size: blob.size,
       name: file.name,

@@ -11,7 +11,7 @@ export async function uploadToBlob(
   const key = `uploads/${datePrefix}/${timestamp}-${safeName}`;
 
   const blob = await put(key, file, {
-    access: "public",
+    access: "private",
     contentType: options?.contentType,
   });
 
