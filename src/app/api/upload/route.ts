@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       url: fileUrl,
       pathname: blob.pathname,
-      size: blob.size,
+      size: file.size,
       name: file.name,
       type: file.type,
     });
