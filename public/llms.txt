@@ -1,0 +1,35 @@
+# Osman Emre YAYGIN — Portfolio
+
+> Portfolio of Osman Emre YAYGIN, a learning-focused software developer crafting modern web experiences.
+
+## About
+
+Osman Emre YAYGIN is a software developer specializing in full-stack web development with React, Next.js, and TypeScript. He builds modern, performant, and accessible web experiences with a focus on clean architecture and continuous learning.
+
+## Skills
+
+- **Frontend:** React, Next.js, TypeScript, Tailwind CSS, Framer Motion, Three.js
+- **Backend:** Node.js, Prisma, REST APIs
+- **Tools:** Git, GitHub, VS Code, Vercel
+- **Other:** Responsive Design, SEO, Accessibility, UI/UX
+
+## Site
+
+- URL: https://osmanemreyaygin.osem.digital
+- Language: Turkish / English (bilingual)
+- Framework: Next.js 16 (App Router)
+- Deployed on: Vercel
+
+## Sections
+
+- **Hero:** Introduction and call-to-action
+- **About:** Background and philosophy
+- **Skills:** Technical competencies
+- **Projects:** Featured work and case studies
+- **Experience:** Professional timeline
+- **Contact:** Get in touch form and social links
+
+## Contact
+
+- Email: osmanemre@yaygin.dev
+- GitHub: https://github.com/osmanemrepro
